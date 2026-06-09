@@ -1,47 +1,64 @@
 import emailService from './email-service';
 import { emailConst } from '../const/entity-const';
-import BizError from '../error/biz-error';
+
+const statusByEventType = {
+	'email.sent': emailConst.status.SENT,
+	'email.delivered': emailConst.status.DELIVERED,
+	'email.complained': emailConst.status.COMPLAINED,
+	'email.bounced': emailConst.status.BOUNCED,
+	'email.delivery_delayed': emailConst.status.DELAYED,
+	'email.failed': emailConst.status.FAILED
+}
 
 const resendService = {
 
 	async webhooks(c, body) {
 
+		const eventType = body?.type;
+		const resendEmailId = body?.data?.email_id;
+		const status = statusByEventType[eventType];
+
+		if (!status) {
+			console.warn(`忽略未处理的 Resend webhook 事件: ${eventType || 'unknown'}`);
+			return;
+		}
+
+		if (!resendEmailId) {
+			console.warn(`忽略缺少 email_id 的 Resend webhook 事件: ${eventType}`);
+			return;
+		}
+
 		const params = {
-			resendEmailId: body.data.email_id,
-			status: emailConst.status.SENT
+			resendEmailId,
+			status
 		}
 
 		if (body.type === 'email.delivered') {
-			params.status = emailConst.status.DELIVERED
 			params.message = null
 		}
 
 		if (body.type === 'email.complained') {
-			params.status = emailConst.status.COMPLAINED
 			params.message = null
 		}
 
 		if (body.type === 'email.bounced') {
 			let bounce = body.data.bounce
 			bounce = JSON.stringify(bounce);
-			params.status = emailConst.status.BOUNCED
 			params.message = bounce
 		}
 
 		if (body.type === 'email.delivery_delayed') {
-			params.status = emailConst.status.DELAYED
 			params.message = null
 		}
 
 		if (body.type === 'email.failed') {
-			params.status = emailConst.status.FAILED
-			params.message = body.data.failed.reason
+			params.message = body.data.failed?.reason || null
 		}
 
 		const emailRow = await emailService.updateEmailStatus(c, params)
 
 		if (!emailRow) {
-			throw new BizError('更新邮件状态记录失败');
+			console.warn(`忽略无法匹配本地邮件的 Resend webhook 事件: ${eventType}, email_id: ${resendEmailId}`);
 		}
 
 	}
