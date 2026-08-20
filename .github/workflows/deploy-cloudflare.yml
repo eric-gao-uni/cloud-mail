@@ -201,6 +201,22 @@ jobs:
           sed -i "s|\${D1_DATABASE_ID}|$D1_ID|g" "$CONFIG_FILE"
           echo "✅ Setup completed."
 
+      - name: 🧱 构建前端并校验产物 / Build frontend and verify assets
+        working-directory: ./mail-worker
+        run: |
+          echo "🏗️ Building frontend..."
+          pnpm --dir ../mail-vue install --frozen-lockfile
+          pnpm --dir ../mail-vue run build
+
+          if [ ! -f dist/index.html ]; then
+            echo "❌ dist/index.html missing - frontend build produced no assets."
+            echo "Refusing to deploy: this would upload an empty assets binding."
+            ls -la dist 2>/dev/null || echo "(dist directory does not exist)"
+            exit 1
+          fi
+
+          echo "✅ Frontend assets verified ($(ls dist | wc -l) entries)."
+
       - name: 🚀 开始部署 / Start deployment
         id: deploy
         working-directory: ./mail-worker
